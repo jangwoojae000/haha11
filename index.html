@@ -249,6 +249,7 @@
             document.getElementById('renter').value = savedRenter;
         }
 
+        // 오늘 날짜를 구하고 YYYY-MM-DD 형식으로 변환
         const today = new Date();
         const formattedDate = today.toISOString().split('T')[0];
         document.getElementById('rentalDate').value = formattedDate;
@@ -263,171 +264,124 @@
         localStorage.setItem('renterName', event.target.value);
     });
 
-    // 폰 리스트 버튼 업데이트
+    // 폰 리스트 업데이트
     function updatePhoneList() {
-        const phoneListContainer = document.getElementById('phoneList');
-        phoneListContainer.innerHTML = '';
+        const phoneListElement = document.getElementById('phoneList');
+        phoneListElement.innerHTML = ''; // 기존 리스트 비우기
 
         phones.forEach(phone => {
             const button = document.createElement('button');
-            button.classList.add('btn', 'phone-button');
+            button.classList.add('btn');
             button.textContent = phone.name;
-            button.dataset.phoneId = phone.id;
-
-            // 대여 중인 폰은 버튼 비활성화 및 텍스트 변경
-            const isRented = rentedPhones.some(rented => rented.phoneId === phone.id && !rented.returnDate);
-            if (isRented) {
-                button.textContent = `${phone.name} (대여중)`;
-                button.disabled = true;
-                button.classList.add('disabled');
-            }
-
-            button.onclick = function () {
-                togglePhoneSelection(phone.id, button);
-            };
-
-            phoneListContainer.appendChild(button);
+            button.onclick = () => togglePhoneSelection(phone.id);
+            phoneListElement.appendChild(button);
         });
     }
 
-    // 폰 버튼 클릭 시 선택/해제
-    function togglePhoneSelection(phoneId, button) {
-        if (button.classList.contains('selected')) {
-            button.classList.remove('selected');
-            selectedPhones = selectedPhones.filter(id => id !== phoneId);
-        } else {
-            button.classList.add('selected');
+    // 폰 선택 토글
+    function togglePhoneSelection(phoneId) {
+        const index = selectedPhones.indexOf(phoneId);
+        if (index === -1) {
             selectedPhones.push(phoneId);
+            document.querySelectorAll('.phone-list button').forEach(button => {
+                if (button.textContent === phones.find(phone => phone.id === phoneId).name) {
+                    button.classList.add('selected');
+                }
+            });
+        } else {
+            selectedPhones.splice(index, 1);
+            document.querySelectorAll('.phone-list button').forEach(button => {
+                if (button.textContent === phones.find(phone => phone.id === phoneId).name) {
+                    button.classList.remove('selected');
+                }
+            });
+        }
+        updateRentButtonState();
+    }
+
+    // 대여 버튼 상태 업데이트
+    function updateRentButtonState() {
+        const rentButton = document.querySelector('.rent-button');
+        if (selectedPhones.length > 0 && document.getElementById('renter').value !== '') {
+            rentButton.classList.remove('disabled');
+            rentButton.disabled = false;
+        } else {
+            rentButton.classList.add('disabled');
+            rentButton.disabled = true;
         }
     }
 
-    // 대여하기 처리
+    // 대여하기 버튼 클릭 시
     function rentPhone() {
         const renterName = document.getElementById('renter').value;
         const rentalDate = document.getElementById('rentalDate').value;
 
-        if (!renterName || selectedPhones.length === 0) {
-            alert('대여자 이름과 대여할 폰을 선택해주세요.');
-            return;
+        if (renterName && selectedPhones.length > 0) {
+            selectedPhones.forEach(phoneId => {
+                rentedPhones.push({
+                    id: phoneId,
+                    renter: renterName,
+                    rentalDate: rentalDate
+                });
+            });
+
+            localStorage.setItem('rentedPhones', JSON.stringify(rentedPhones));
+
+            // 선택된 폰 초기화 및 대여 목록 업데이트
+            selectedPhones = [];
+            updatePhoneList();
+            updateRentedPhonesList();
+            updateRentButtonState();
         }
-
-        selectedPhones.forEach(phoneId => {
-            const phone = phones.find(p => p.id === phoneId);
-            if (phone) {
-                rentedPhones.unshift({
-                    phoneId: phoneId,
-                    phoneName: phone.name,
-                    renterName: renterName,
-                    rentalDate: rentalDate,
-                    returnDate: ''
-                });
-
-                rentalHistory.unshift({
-                    phoneId: phoneId,
-                    phoneName: phone.name,
-                    renterName: renterName,
-                    rentalDate: rentalDate,
-                    returnerName: '',
-                    returnDate: ''
-                });
-            }
-        });
-
-        selectedPhones = [];
-        document.querySelectorAll('.phone-button').forEach(button => {
-            button.classList.remove('selected');
-        });
-
-        // 대여자 이름 유지
-        updatePhoneList();
-        updateRentedPhonesList();
-        updateHistoryTable();
-
-        // 로컬 스토리지에 대여 내역 저장
-        localStorage.setItem('rentedPhones', JSON.stringify(rentedPhones));
-        localStorage.setItem('rentalHistory', JSON.stringify(rentalHistory));
     }
 
     // 대여 중인 폰 리스트 업데이트
     function updateRentedPhonesList() {
-        const rentedPhonesBody = document.getElementById('rentedPhonesBody');
-        rentedPhonesBody.innerHTML = '';
-
-        rentedPhones.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
+        const rentedPhonesTableBody = document.getElementById('rentedPhonesBody');
+        rentedPhonesTableBody.innerHTML = ''; // 기존 리스트 비우기
 
         rentedPhones.forEach(phone => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${phone.phoneName}</td>
-                <td>${phone.renterName}</td>
+                <td>${phones.find(p => p.id === phone.id).name}</td>
+                <td>${phone.renter}</td>
                 <td>${phone.rentalDate}</td>
-                <td><button onclick="returnPhone('${phone.phoneId}')">반납</button></td>
+                <td><button onclick="returnPhone('${phone.id}')">반납</button></td>
             `;
-            rentedPhonesBody.appendChild(row);
+            rentedPhonesTableBody.appendChild(row);
         });
     }
 
     // 반납 처리
     function returnPhone(phoneId) {
-        const phoneIndex = rentedPhones.findIndex(phone => phone.phoneId === phoneId);
-        if (phoneIndex > -1) {
-            const returnedPhone = rentedPhones.splice(phoneIndex, 1)[0];
-            const returnDate = new Date().toISOString().split('T')[0];
-            const returnerName = returnedPhone.renterName;
-
-            const historyEntry = rentalHistory.find(entry => entry.phoneId === phoneId && entry.returnerName === '');
-            if (historyEntry) {
-                historyEntry.returnerName = returnerName;
-                historyEntry.returnDate = returnDate;
-            }
-
-            document.querySelectorAll('.phone-button').forEach(button => {
-                if (button.dataset.phoneId === phoneId) {
-                    button.classList.remove('disabled');
-                    button.classList.remove('selected');
-                    button.textContent = phones.find(p => p.id === phoneId).name;
-                    button.disabled = false;
-                }
-            });
-
-            updateRentedPhonesList();
-            updateHistoryTable();
-
-            // 로컬 스토리지에 반납된 내역 저장
-            localStorage.setItem('rentedPhones', JSON.stringify(rentedPhones));
-            localStorage.setItem('rentalHistory', JSON.stringify(rentalHistory));
-        }
+        rentedPhones = rentedPhones.filter(phone => phone.id !== phoneId);
+        localStorage.setItem('rentedPhones', JSON.stringify(rentedPhones));
+        updateRentedPhonesList();
+        updateHistoryTable();
     }
 
-    // 대여/반납 내역 보기
+    // 대여/반납 내역 보기 토글
     function toggleHistory() {
         const historySection = document.getElementById('historySection');
         const arrowIcon = document.getElementById('arrowIcon');
-        if (historySection.style.display === 'none') {
-            historySection.style.display = 'block';
-            arrowIcon.classList.remove('down');
-            arrowIcon.classList.add('up');
-        } else {
-            historySection.style.display = 'none';
-            arrowIcon.classList.remove('up');
-            arrowIcon.classList.add('down');
-        }
+        const isVisible = historySection.style.display === 'block';
+        historySection.style.display = isVisible ? 'none' : 'block';
+        arrowIcon.classList.toggle('down', isVisible);
+        arrowIcon.classList.toggle('up', !isVisible);
     }
 
-    // 대여/반납 내역 업데이트
+    // 대여/반납 내역 테이블 업데이트
     function updateHistoryTable() {
         const historyBody = document.getElementById('historyBody');
         historyBody.innerHTML = '';
 
-        rentalHistory.sort((a, b) => new Date(b.rentalDate) - new Date(a.rentalDate));
-
         rentalHistory.forEach(entry => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${entry.phoneName}</td>
-                <td>${entry.renterName}</td>
+                <td>${phones.find(phone => phone.id === entry.phoneId).name}</td>
+                <td>${entry.renter}</td>
                 <td>${entry.rentalDate}</td>
-                <td>${entry.returnerName}</td>
+                <td>${entry.returner}</td>
                 <td>${entry.returnDate}</td>
             `;
             historyBody.appendChild(row);
